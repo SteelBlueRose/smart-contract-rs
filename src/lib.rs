@@ -86,6 +86,7 @@ pub struct Break {
     start_time: f64,
     end_time: f64,
     is_regular: bool,
+    date: Option<String>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Debug)]
@@ -113,12 +114,13 @@ impl TodoListV1 {
         Self::default()
     }
 
-    pub fn add_break(&mut self, start_time: f64, end_time: f64, is_regular: bool) {
+    pub fn add_break(&mut self, start_time: f64, end_time: f64, is_regular: bool, date: Option<String>) {
         let account_id = env::signer_account_id();
         let new_break = Break {
             start_time,
             end_time,
             is_regular,
+            date: if is_regular { None } else { date },
         };
         let account_breaks = self.breaks.entry(account_id.clone()).or_insert_with(|| AccountBreaks {
             regular_breaks: vec![],
@@ -139,18 +141,18 @@ impl TodoListV1 {
         })
     }
 
-    pub fn remove_break(&mut self, start_time: f64, end_time: f64, is_regular: bool) {
+    pub fn remove_break(&mut self, start_time: f64, end_time: f64, is_regular: bool, date: Option<String>) {
         let account_id = env::signer_account_id();
         if let Some(account_breaks) = self.breaks.get_mut(&account_id) {
             if is_regular {
                 account_breaks.regular_breaks.retain(|b| !(b.start_time == start_time && b.end_time == end_time));
             } else {
-                account_breaks.one_time_breaks.retain(|b| !(b.start_time == start_time && b.end_time == end_time));
+                account_breaks.one_time_breaks.retain(|b| !(b.start_time == start_time && b.end_time == end_time && b.date == date));
             }
         }
     }
 
-    pub fn update_break(&mut self, old_start_time: f64, old_end_time: f64, new_start_time: f64, new_end_time: f64, is_regular: bool) {
+    pub fn update_break(&mut self, old_start_time: f64, old_end_time: f64, new_start_time: f64, new_end_time: f64, is_regular: bool, date: Option<String>) {
         let account_id = env::signer_account_id();
         if let Some(account_breaks) = self.breaks.get_mut(&account_id) {
             if is_regular {
@@ -159,9 +161,10 @@ impl TodoListV1 {
                     break_.end_time = new_end_time;
                 }
             } else {
-                if let Some(break_) = account_breaks.one_time_breaks.iter_mut().find(|b| b.start_time == old_start_time && b.end_time == old_end_time) {
+                if let Some(break_) = account_breaks.one_time_breaks.iter_mut().find(|b| b.start_time == old_start_time && b.end_time == old_end_time && b.date == date) {
                     break_.start_time = new_start_time;
                     break_.end_time = new_end_time;
+                    break_.date = date;
                 }
             }
         }
@@ -564,63 +567,102 @@ mod tests {
         let stored_slots = contract.get_time_slots(accounts(1)).unwrap();
         assert_eq!(stored_slots, time_slots);
     }
+
     #[test]
-    fn test_add_break() {
+    fn test_add_regular_break() {
         let context = get_context(accounts(1));
         testing_env!(context.build());
         let mut contract = TodoListV1::new();
 
-        contract.add_break(9.0, 10.0, true);
-        contract.add_break(14.0, 15.0, false);
-
+        contract.add_break(9.0, 10.0, true, None);
+        
         let breaks = contract.get_breaks(accounts(1));
         assert_eq!(breaks.regular_breaks.len(), 1);
-        assert_eq!(breaks.one_time_breaks.len(), 1);
-
-        let regular_break = &breaks.regular_breaks[0];
-        assert_eq!(regular_break.start_time, 9.0);
-        assert_eq!(regular_break.end_time, 10.0);
-        assert_eq!(regular_break.is_regular, true);
-
-        let one_time_break = &breaks.one_time_breaks[0];
-        assert_eq!(one_time_break.start_time, 14.0);
-        assert_eq!(one_time_break.end_time, 15.0);
-        assert_eq!(one_time_break.is_regular, false);
+        let break_ = &breaks.regular_breaks[0];
+        assert_eq!(break_.start_time, 9.0);
+        assert_eq!(break_.end_time, 10.0);
+        assert_eq!(break_.is_regular, true);
+        assert!(break_.date.is_none());
     }
 
     #[test]
-    fn test_remove_break() {
+    fn test_add_one_time_break() {
         let context = get_context(accounts(1));
         testing_env!(context.build());
         let mut contract = TodoListV1::new();
 
-        contract.add_break(9.0, 10.0, true);
-        contract.add_break(14.0, 15.0, false);
+        contract.add_break(9.0, 10.0, false, Some("2024-05-30".to_string()));
+        
+        let breaks = contract.get_breaks(accounts(1));
+        assert_eq!(breaks.one_time_breaks.len(), 1);
+        let break_ = &breaks.one_time_breaks[0];
+        assert_eq!(break_.start_time, 9.0);
+        assert_eq!(break_.end_time, 10.0);
+        assert_eq!(break_.is_regular, false);
+        assert_eq!(break_.date, Some("2024-05-30".to_string()));
+    }
 
-        contract.remove_break(9.0, 10.0, true);
-        contract.remove_break(14.0, 15.0, false);
+    #[test]
+    fn test_remove_regular_break() {
+        let context = get_context(accounts(1));
+        testing_env!(context.build());
+        let mut contract = TodoListV1::new();
 
+        contract.add_break(9.0, 10.0, true, None);
+        contract.remove_break(9.0, 10.0, true, None);
+        
         let breaks = contract.get_breaks(accounts(1));
         assert_eq!(breaks.regular_breaks.len(), 0);
+    }
+
+    #[test]
+    fn test_remove_one_time_break() {
+        let context = get_context(accounts(1));
+        testing_env!(context.build());
+        let mut contract = TodoListV1::new();
+
+        contract.add_break(9.0, 10.0, false, Some("2024-05-30".to_string()));
+        contract.remove_break(9.0, 10.0, false, Some("2024-05-30".to_string()));
+        
+        let breaks = contract.get_breaks(accounts(1));
         assert_eq!(breaks.one_time_breaks.len(), 0);
     }
 
     #[test]
-    fn test_update_break() {
+    fn test_update_regular_break() {
         let context = get_context(accounts(1));
         testing_env!(context.build());
         let mut contract = TodoListV1::new();
 
-        contract.add_break(9.0, 10.0, true);
-        contract.update_break(9.0, 10.0, 11.0, 12.0, true);
-
+        contract.add_break(9.0, 10.0, true, None);
+        contract.update_break(9.0, 10.0, 10.0, 11.0, true, None);
+        
         let breaks = contract.get_breaks(accounts(1));
         assert_eq!(breaks.regular_breaks.len(), 1);
-
-        let regular_break = &breaks.regular_breaks[0];
-        assert_eq!(regular_break.start_time, 11.0);
-        assert_eq!(regular_break.end_time, 12.0);
+        let break_ = &breaks.regular_breaks[0];
+        assert_eq!(break_.start_time, 10.0);
+        assert_eq!(break_.end_time, 11.0);
+        assert_eq!(break_.is_regular, true);
     }
+
+    #[test]
+    fn test_update_one_time_break() {
+        let context = get_context(accounts(1));
+        testing_env!(context.build());
+        let mut contract = TodoListV1::new();
+
+        contract.add_break(9.0, 10.0, false, Some("2024-05-30".to_string()));
+        contract.update_break(9.0, 10.0, 10.0, 11.0, false, Some("2024-05-30".to_string()));
+        
+        let breaks = contract.get_breaks(accounts(1));
+        assert_eq!(breaks.one_time_breaks.len(), 1);
+        let break_ = &breaks.one_time_breaks[0];
+        assert_eq!(break_.start_time, 10.0);
+        assert_eq!(break_.end_time, 11.0);
+        assert_eq!(break_.is_regular, false);
+        assert_eq!(break_.date, Some("2024-05-30".to_string()));
+    }
+
 }
 
 
