@@ -33,8 +33,6 @@ pub struct Task {
     estimated_time: Option<f64>,
     reward_points: i64,
     completed: bool,
-    preferred_start_time: Option<f64>,
-    preferred_end_time: Option<f64>,
     owner: AccountIdWrapper,
 }
 
@@ -171,8 +169,7 @@ impl TodoListV1 {
     }
 
     pub fn add_task(&mut self, title: String, description: String, priority: u8, 
-                    deadline: Option<u64>, estimated_time: Option<f64>, reward_points: i64,
-                    preferred_start_time: Option<f64>, preferred_end_time: Option<f64>) {
+                    deadline: Option<u64>, estimated_time: Option<f64>, reward_points: i64) {
         let account_id = env::signer_account_id();
         
 
@@ -185,8 +182,6 @@ impl TodoListV1 {
             estimated_time,
             reward_points,
             completed: false,
-            preferred_start_time,
-            preferred_end_time,
             owner: AccountIdWrapper(account_id.clone()),
         };
         self.tasks.entry(account_id).or_insert_with(Vec::new).push(task);
@@ -207,8 +202,7 @@ impl TodoListV1 {
     }
 
     pub fn update_task(&mut self, id: u64, title: String, description: String, priority: u8, 
-                       deadline: Option<u64>, estimated_time: Option<f64>, reward_points: i64,
-                       preferred_start_time: Option<f64>, preferred_end_time: Option<f64>) {
+                       deadline: Option<u64>, estimated_time: Option<f64>, reward_points: i64) {
         let account_id = env::signer_account_id();
         
 
@@ -220,8 +214,6 @@ impl TodoListV1 {
                 task.deadline = deadline;
                 task.estimated_time = estimated_time;
                 task.reward_points = reward_points;
-                task.preferred_start_time = preferred_start_time;
-                task.preferred_end_time = preferred_end_time;
             }
         }
     }
@@ -361,8 +353,6 @@ mod tests {
             Some(1_640_995_200_000_000_000),
             Some(2.0),
             10,
-            Some(9.0),
-            Some(11.0),
         );
         
         let tasks = contract.get_tasks(accounts(1));
@@ -374,8 +364,6 @@ mod tests {
         assert_eq!(task.deadline, Some(1_640_995_200_000_000_000));
         assert_eq!(task.estimated_time, Some(2.0));
         assert_eq!(task.reward_points, 10);
-        assert_eq!(task.preferred_start_time, Some(9.0));
-        assert_eq!(task.preferred_end_time, Some(11.0));
     }
 
     #[test]
@@ -391,8 +379,6 @@ mod tests {
             Some(1_640_995_200_000_000_000),
             Some(2.0),
             10,
-            Some(9.0),
-            Some(11.0),
         );
 
         let tasks = contract.get_tasks(accounts(1));
@@ -406,8 +392,6 @@ mod tests {
             Some(1_641_995_200_000_000_000),
             Some(3.0),
             20,
-            Some(10.0),
-            Some(12.0),
         );
 
         let tasks = contract.get_tasks(accounts(1));
@@ -419,8 +403,6 @@ mod tests {
         assert_eq!(task.deadline, Some(1_641_995_200_000_000_000));
         assert_eq!(task.estimated_time, Some(3.0));
         assert_eq!(task.reward_points, 20);
-        assert_eq!(task.preferred_start_time, Some(10.0));
-        assert_eq!(task.preferred_end_time, Some(12.0));
     }
 
     #[test]
@@ -436,8 +418,6 @@ mod tests {
             Some(1_640_995_200_000_000_000),
             Some(2.0),
             10,
-            Some(9.0),
-            Some(11.0),
         );
 
         let tasks = contract.get_tasks(accounts(1));
@@ -512,8 +492,6 @@ mod tests {
             Some(1_640_995_200_000_000_000),
             Some(2.0),
             10,
-            Some(9.0),
-            Some(11.0),
         );
 
         let tasks = contract.get_tasks(accounts(1));
